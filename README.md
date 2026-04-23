@@ -87,9 +87,15 @@ For all future updates to `server.py`, use the deploy script — it substitutes 
 
 ## Rendering on Mac
 
-Download images from the Pi first (replace `<username>`):
+First download and clean up images from the Pi using the download script:
 ```bash
-rsync -av --progress <username>@192.168.1.xxx:/home/<username>/timelapse/ ~/timelapse/
+./download.sh
+```
+
+This transfers all images to `~/timelapse/` and deletes them from the Pi as they are confirmed received — keeping the Pi's SD card free for the next period. A confirmation prompt is shown before anything is deleted.
+
+Then render with ffmpeg:
+```bash
 cd ~/timelapse
 ```
 
