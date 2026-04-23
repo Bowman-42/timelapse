@@ -2,5 +2,10 @@
 # Copy config.example.h to config.h and fill in your values
 config.h
 
+# Pi deploy config and script — contains username and IP
+# Copy pi.conf.example to pi.conf and fill in your values
+pi.conf
+deploy.sh
+
 # macOS
 .DS_Store
