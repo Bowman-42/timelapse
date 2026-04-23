@@ -193,7 +193,7 @@ Download images from the Pi first (replace `<username>`):
 rsync -av --progress <username>@192.168.1.xxx:/home/<username>/timelapse/ ~/timelapse/
 ```
 
-Then run ffmpeg locally. SVGA (800×600) is a 4:3 aspect ratio — use one of these output options:
+Then run ffmpeg locally. XGA (1024×768) is a 4:3 aspect ratio — use one of these output options:
 
 ```bash
 # Native 4:3 at source resolution (crisp, no upscaling)
