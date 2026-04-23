@@ -1,0 +1,15 @@
+[Unit]
+Description=Timelapse image receiver
+After=network.target
+
+[Service]
+ExecStart=/home/<username>/timelapse-server/venv/bin/python /home/<username>/timelapse-server/server.py
+WorkingDirectory=/home/<username>/timelapse-server
+Restart=always
+RestartSec=5
+User=<username>
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

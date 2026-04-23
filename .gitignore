@@ -1,0 +1,6 @@
+# Local config — contains WiFi credentials and server IP
+# Copy config.example.h to config.h and fill in your values
+config.h
+
+# macOS
+.DS_Store
