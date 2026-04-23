@@ -38,7 +38,7 @@ The timestamp in every filename is UTC, with minute precision. Alphabetical orde
 ### ESP32
 
 1. Open `Timelapse.ino` in Arduino IDE
-2. Edit `config.h`:
+2. Copy `config.example.h` to `config.h` and fill in your values:
    - Set `WIFI_SSID` and `WIFI_PASSWORD`
    - Set `SERVER_IP` to the Pi's reserved IP address
 3. Board settings:
@@ -49,7 +49,7 @@ The timestamp in every filename is UTC, with minute precision. Alphabetical orde
 
 ### Raspberry Pi
 
-> Replace `<username>` with your actual Raspberry Pi username throughout all commands below, and in `server.py` and `timelapse.service` before copying them to the Pi.
+> Replace `<username>` with your actual Raspberry Pi username throughout all commands below. The deploy script handles substitution in `server.py` and `timelapse.service` automatically.
 
 Create the server directory and install Flask in a virtual environment (required on Raspberry Pi OS Bookworm):
 ```bash
@@ -121,7 +121,7 @@ make_timelapse() {
 Best for showing the seasonal arc. Uses only shots taken at :00 and :30.
 
 ```bash
-find . -name "*.jpg" | grep -E "_(00|30)\.jpg$" | sort \
+find . -name "*.jpg" | grep -E "-(00|30)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
