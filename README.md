@@ -212,10 +212,19 @@ At 1-minute interval, 24/7, at 65°N (accounting for dark nights compressing wel
 | Pi SD (64 GB) | ~56 GB usable | ~6 GB/month | Clean every 3 months, never at risk |
 | ESP32 SD (8 GB) | 8 GB | ~180 MB/day avg | Buffers ~45 days of Pi outage |
 
+## Browsing images
+
+Open `http://192.168.1.xxx:5000` in a browser to browse images on the Pi:
+
+- **`/`** — list of all days, newest first, with image count per day
+- **`/day/<date>`** — hours in that day, with image count per hour
+- **`/day/<date>/<hour>`** — full image grid for that hour, lazy-loaded
+
+Clicking any image opens it at full XGA resolution in a new tab.
+
 ## Monitoring
 
-Check how many images have been received and how much disk space is left:
-
+Check image count and disk space:
 ```bash
 curl http://192.168.1.xxx:5000/status
 ```
