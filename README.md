@@ -58,43 +58,42 @@ python3 -m venv /home/<username>/timelapse-server/venv
 /home/<username>/timelapse-server/venv/bin/pip install flask
 ```
 
-Edit `pi/server.py` and `pi/timelapse.service` — replace `<username>` with your username — then copy to the Pi:
+Copy `pi.conf.example` to `pi.conf` and fill in your username and Pi IP — this is used by the deploy script and is gitignored so it never gets committed:
 ```bash
-scp pi/server.py <username>@192.168.1.xxx:/home/<username>/timelapse-server/server.py
-scp pi/timelapse.service <username>@192.168.1.xxx:/home/<username>/timelapse-server/timelapse.service
+cp pi.conf.example pi.conf
 ```
 
-Test manually:
+Copy the service file to the Pi and install it (first time only):
 ```bash
-/home/<username>/timelapse-server/venv/bin/python /home/<username>/timelapse-server/server.py
+scp pi/timelapse.service <username>@192.168.1.xxx:/home/<username>/timelapse-server/timelapse.service
+ssh <username>@192.168.1.xxx "sudo cp /home/<username>/timelapse-server/timelapse.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable timelapse"
+```
+
+Test the server manually before starting it as a service:
+```bash
+ssh <username>@192.168.1.xxx "/home/<username>/timelapse-server/venv/bin/python /home/<username>/timelapse-server/server.py"
 curl http://192.168.1.xxx:5000/status
 ```
 
-Install as a service so it starts on boot:
+Start the service:
 ```bash
-sudo cp /home/<username>/timelapse-server/timelapse.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable timelapse
-sudo systemctl start timelapse
+ssh <username>@192.168.1.xxx "sudo systemctl start timelapse && sudo systemctl status timelapse"
 ```
 
-Check it is running:
+For all future updates to `server.py`, use the deploy script — it substitutes `<username>`, uploads, and restarts the service in one step:
 ```bash
-sudo systemctl status timelapse
+./deploy.sh
 ```
 
-## Creating movies with ffmpeg
+## Rendering on Mac
 
-All commands run on the Pi. `cd` to the timelapse directory first:
-
+Download images from the Pi first (replace `<username>`):
 ```bash
-cd /home/pi/timelapse
+rsync -av --progress <username>@192.168.1.xxx:/home/<username>/timelapse/ ~/timelapse/
+cd ~/timelapse
 ```
 
-The general pattern is:
-1. Use `find` + `grep` to select the frames you want
-2. Pipe into a file list
-3. Feed that list to ffmpeg
+The general pattern is: use `find` + `grep` to select the frames you want, pipe into a file list, feed that to ffmpeg.
 
 ### Helper function (add to ~/.bashrc for convenience)
 
@@ -120,6 +119,7 @@ find . -name "*.jpg" | grep -E "_(00|30)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
+  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart year_30min.mp4
 ```
 
@@ -130,6 +130,7 @@ find . -name "*.jpg" | grep -E "-00\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
+  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart year_60min.mp4
 ```
 
@@ -140,6 +141,7 @@ find ./2026-07-* -name "*.jpg" | grep -E "-(00|15|30|45)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
+  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart july_15min.mp4
 ```
 
@@ -152,6 +154,7 @@ find ./2026-07-14 ./2026-07-15 ./2026-07-16 ./2026-07-17 \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
+  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart week_5min.mp4
 ```
 
@@ -162,6 +165,7 @@ find ./2026-07-15 -name "*.jpg" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
+  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart day_2026-07-15.mp4
 ```
 
@@ -169,7 +173,20 @@ ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
 
 ```bash
 ffmpeg -r 12 -f concat -safe 0 -i frames.txt \
+  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart day_2026-07-15_slow.mp4
+```
+
+### Output format options
+
+XGA (1024×768) is 4:3. All examples above use 1080p letterboxed to 16:9 (black bars top/bottom). Alternatives:
+
+```bash
+# Native 4:3 — no scaling, sharpest
+-vf "scale=1024:768"
+
+# Cropped to 16:9 — fills the screen, slight crop on sides
+-vf "scale=1920:1440,crop=1920:1080:0:180"
 ```
 
 ---
@@ -185,31 +202,6 @@ All tiers are derived from the 1-minute source — no re-shooting needed.
 | 15 min | `-(00\|15\|30\|45)\.jpg` | ~35,000 | ~24 min |
 | 30 min | `-(00\|30)\.jpg` | ~17,500 | ~12 min |
 | 60 min | `-00\.jpg` | ~8,760 | ~6 min |
-
-## Rendering on Mac
-
-Download images from the Pi first (replace `<username>`):
-```bash
-rsync -av --progress <username>@192.168.1.xxx:/home/<username>/timelapse/ ~/timelapse/
-```
-
-Then run ffmpeg locally. XGA (1024×768) is a 4:3 aspect ratio — use one of these output options:
-
-```bash
-# Native 4:3 at source resolution (crisp, no upscaling)
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart output_native.mp4
-
-# Upscaled to 1080p, letterboxed to 16:9 (black bars top/bottom)
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart output_1080p.mp4
-
-# Upscaled to 1080p, cropped to 16:9 (slight crop on sides)
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1920:1440,crop=1920:1080:0:180" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart output_1080p_crop.mp4
-```
 
 ## Storage reference
 
