@@ -4,7 +4,7 @@ Year-long timelapse project using an ESP32-S3 Eye camera at 65°N. Captures the 
 
 ## Hardware
 
-- ESP32-S3 Eye (OV2640 camera, built-in SD card slot)
+- [ESP32-S3 Eye](https://www.aliexpress.com/item/1005004960637276.html) (OV2640 camera, built-in SD card slot)
 - Raspberry Pi 3B (image storage server)
 - Power: powerbank on mains (provides power during outages without needing a battery change)
 
