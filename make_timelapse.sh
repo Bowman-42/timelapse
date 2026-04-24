@@ -50,7 +50,7 @@ with open("subtitles.srt", "w") as out:
 print(f"Written {len(paths)} subtitle entries to subtitles.srt")
 EOF
 
-  VF="scale=1440:1080,pad=1920:1080:240:0:black,subtitles=subtitles.srt:force_style='FontSize=28,PrimaryColour=&Hffffff,BackColour=&H80000000,BorderStyle=4,MarginV=20'"
+  VF="scale=1440:1080,pad=1920:1080:240:0:black,subtitles=subtitles.srt:force_style=FontSize=28\,PrimaryColour=&Hffffff\,BackColour=&H80000000\,BorderStyle=4\,MarginV=20"
 else
   VF="scale=1440:1080,pad=1920:1080:240:0:black"
 fi
