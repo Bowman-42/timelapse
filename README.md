@@ -94,27 +94,11 @@ First download and clean up images from the Pi using the download script:
 
 This transfers all images to `~/timelapse/` and deletes them from the Pi as they are confirmed received — keeping the Pi's SD card free for the next period. A confirmation prompt is shown before anything is deleted.
 
-Then render with ffmpeg:
+Then use `find` + `grep` to select the frames you want, pipe into a frames list, and pass it to `make_timelapse.sh`:
+
 ```bash
 cd ~/timelapse
 ```
-
-The general pattern is: use `find` + `grep` to select the frames you want, pipe into a file list, feed that to ffmpeg.
-
-### Helper function (add to ~/.bashrc for convenience)
-
-```bash
-make_timelapse() {
-  # Usage: make_timelapse <frame_list_file> <output.mp4> [fps]
-  local frames=$1
-  local output=$2
-  local fps=${3:-24}
-  ffmpeg -r "$fps" -f concat -safe 0 -i "$frames" \
-    -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$output"
-}
-```
-
----
 
 ### Full year — 30-minute interval (~17,500 frames → ~12 min at 24fps)
 
@@ -124,9 +108,7 @@ Best for showing the seasonal arc. Uses only shots taken at :00 and :30.
 find . -name "*.jpg" | grep -E "[0-9]{2}-(00|30)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart year_30min.mp4
+~/path/to/make_timelapse.sh frames.txt year_30min.mp4
 ```
 
 ### Full year — 60-minute interval (~8,760 frames → ~6 min at 24fps)
@@ -135,9 +117,7 @@ ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
 find . -name "*.jpg" | grep -E "[0-9]{2}-00\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart year_60min.mp4
+~/path/to/make_timelapse.sh frames.txt year_60min.mp4
 ```
 
 ### Single month — 15-minute interval
@@ -146,9 +126,7 @@ ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
 find ./2026-07-* -name "*.jpg" | grep -E "[0-9]{2}-(00|15|30|45)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart july_15min.mp4
+~/path/to/make_timelapse.sh frames.txt july_15min.mp4
 ```
 
 ### Single week — 5-minute interval
@@ -159,9 +137,7 @@ find ./2026-07-14 ./2026-07-15 ./2026-07-16 ./2026-07-17 \
   -name "*.jpg" | grep -E "[0-9]{2}-(00|05|10|15|20|25|30|35|40|45|50|55)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart week_5min.mp4
+~/path/to/make_timelapse.sh frames.txt week_5min.mp4
 ```
 
 ### Single day — all frames, 1-minute interval (~1,440 frames → ~60 sec at 24fps)
@@ -170,17 +146,18 @@ ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
 find ./2026-07-15 -name "*.jpg" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
-ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart day_2026-07-15.mp4
+~/path/to/make_timelapse.sh frames.txt day_2026-07-15.mp4
+
+# Slower playback (12fps):
+~/path/to/make_timelapse.sh frames.txt day_2026-07-15_slow.mp4 12
 ```
 
-### Single day — slower playback (12fps) for more detail
+### Timestamp overlay
+
+Add `--timestamp` to burn the UTC date and time onto each frame:
 
 ```bash
-ffmpeg -r 12 -f concat -safe 0 -i frames.txt \
-  -vf "scale=1440:1080,pad=1920:1080:240:0:black" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart day_2026-07-15_slow.mp4
+~/path/to/make_timelapse.sh frames.txt day_timestamped.mp4 24 --timestamp
 ```
 
 ### Output format options
