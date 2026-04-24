@@ -17,8 +17,13 @@ fi
 
 source "$CONF"
 
-LOCAL_DIR="$HOME/timelapse"
 REMOTE_DIR="/home/$PI_USER/timelapse"
+
+if [ ! -d "$LOCAL_DIR" ]; then
+  echo "Error: local directory not found: $LOCAL_DIR"
+  echo "Is the external drive mounted?"
+  exit 1
+fi
 
 echo "Download timelapse images from $PI_USER@$PI_IP"
 echo "  Remote: $REMOTE_DIR"
@@ -35,6 +40,7 @@ echo ""
 mkdir -p "$LOCAL_DIR"
 
 # Transfer and remove source files as they are confirmed received
+
 rsync -av --progress --remove-source-files \
   "$PI_USER@$PI_IP:$REMOTE_DIR/" "$LOCAL_DIR/"
 
