@@ -121,7 +121,7 @@ make_timelapse() {
 Best for showing the seasonal arc. Uses only shots taken at :00 and :30.
 
 ```bash
-find . -name "*.jpg" | grep -E "-(00|30)\.jpg$" | sort \
+find . -name "*.jpg" | grep -E "[0-9]{2}-(00|30)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
@@ -132,7 +132,7 @@ ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
 ### Full year — 60-minute interval (~8,760 frames → ~6 min at 24fps)
 
 ```bash
-find . -name "*.jpg" | grep -E "-00\.jpg$" | sort \
+find . -name "*.jpg" | grep -E "[0-9]{2}-00\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
@@ -143,7 +143,7 @@ ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
 ### Single month — 15-minute interval
 
 ```bash
-find ./2026-07-* -name "*.jpg" | grep -E "-(00|15|30|45)\.jpg$" | sort \
+find ./2026-07-* -name "*.jpg" | grep -E "[0-9]{2}-(00|15|30|45)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
@@ -156,7 +156,7 @@ ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
 ```bash
 find ./2026-07-14 ./2026-07-15 ./2026-07-16 ./2026-07-17 \
      ./2026-07-18 ./2026-07-19 ./2026-07-20 \
-  -name "*.jpg" | grep -E "-(00|05|10|15|20|25|30|35|40|45|50|55)\.jpg$" | sort \
+  -name "*.jpg" | grep -E "[0-9]{2}-(00|05|10|15|20|25|30|35|40|45|50|55)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ffmpeg -r 24 -f concat -safe 0 -i frames.txt \
@@ -204,10 +204,10 @@ All tiers are derived from the 1-minute source — no re-shooting needed.
 | Tier | grep pattern | Frames/year | Video @ 24fps |
 |------|-------------|-------------|---------------|
 | 1 min | `*.jpg` (all) | ~525,000 | ~6 hours |
-| 5 min | `-(00\|05\|10\|15\|20\|25\|30\|35\|40\|45\|50\|55)\.jpg` | ~105,000 | ~73 min |
-| 15 min | `-(00\|15\|30\|45)\.jpg` | ~35,000 | ~24 min |
-| 30 min | `-(00\|30)\.jpg` | ~17,500 | ~12 min |
-| 60 min | `-00\.jpg` | ~8,760 | ~6 min |
+| 5 min | `[0-9]{2}-(00\|05\|10\|15\|20\|25\|30\|35\|40\|45\|50\|55)\.jpg` | ~105,000 | ~73 min |
+| 15 min | `[0-9]{2}-(00\|15\|30\|45)\.jpg` | ~35,000 | ~24 min |
+| 30 min | `[0-9]{2}-(00\|30)\.jpg` | ~17,500 | ~12 min |
+| 60 min | `[0-9]{2}-00\.jpg` | ~8,760 | ~6 min |
 
 ## Storage reference
 
