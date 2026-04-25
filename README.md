@@ -94,7 +94,7 @@ First download and clean up images from the Pi using the download script:
 
 This transfers all images to `~/timelapse/` and deletes them from the Pi as they are confirmed received — keeping the Pi's SD card free for the next period. A confirmation prompt is shown before anything is deleted.
 
-Then use `find` + `grep` to select the frames you want, pipe into a frames list, and pass it to `make_timelapse.sh`:
+Then use `find` + `grep` to select the frames you want, pipe into a frames list, and pass it to `make_timelapse.sh`. macOS creates hidden `._` resource fork files alongside every JPEG — the script filters these out automatically, so you don't need to exclude them in your `find` command.
 
 ```bash
 cd ~/timelapse
@@ -160,6 +160,8 @@ Add `--timestamp` to burn the UTC date and time onto each frame:
 ~/path/to/make_timelapse.sh frames.txt day_timestamped.mp4 24 --timestamp
 ```
 
+This generates a per-frame SRT subtitle file (via libass) and burns it into the video. Temp files (`frames_clean.txt`, `timestamps.srt`) are cleaned up automatically when the script exits.
+
 ### Output format options
 
 XGA (1024×768) is 4:3. All examples above use 1080p letterboxed to 16:9 (black bars top/bottom). Alternatives:
@@ -197,7 +199,9 @@ At 1-minute interval, 24/7, at 65°N (accounting for dark nights compressing wel
 
 ## Browsing images
 
-Open `http://192.168.1.xxx:5000` in a browser to browse images on the Pi:
+Open `http://192.168.1.xxx:5000` in a browser to browse images on the Pi.
+
+> **macOS Tahoe:** Go to System Settings → Privacy & Security → Local Network and enable access for your browser if it can't reach the Pi.
 
 - **`/`** — list of all days, newest first, with image count per day
 - **`/day/<date>`** — hours in that day, with image count per hour
