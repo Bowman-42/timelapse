@@ -4,6 +4,7 @@
 #include "SD_MMC.h"
 #include <time.h>
 #include "config.h"
+#include <Adafruit_NeoPixel.h>
 
 // Camera pins — ESP32-S3 Eye
 #define PWDN_GPIO_NUM  -1
@@ -30,6 +31,33 @@
 
 unsigned long lastCaptureMs = 0;
 
+// ── Status LED ────────────────────────────────────────────────────────────────
+#define LED_PIN   48
+#define LED_BRIGHT 25   // 0-255; onboard LED is very bright at full power
+
+Adafruit_NeoPixel statusLed(1, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+static bool     ledReady    = false;   // false → blink red, true → solid green
+static uint32_t lastBlinkMs = 0;
+static bool     ledOn       = false;
+
+void setLed(uint8_t r, uint8_t g, uint8_t b) {
+  statusLed.setPixelColor(0, statusLed.Color(r, g, b));
+  statusLed.show();
+}
+
+// Call inside blocking loops — blinks red at 4 Hz while ledReady == false
+void tickLed() {
+  if (ledReady) return;
+  uint32_t now = millis();
+  if (now - lastBlinkMs >= 250) {
+    lastBlinkMs = now;
+    ledOn = !ledOn;
+    setLed(ledOn ? 255 : 0, 0, 0);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Forward declarations
 void connectWiFi();
 void syncNTP();
@@ -45,23 +73,29 @@ void getTimeStrings(char* folder, size_t folderLen, char* filename, size_t filen
 // =============================================================================
 
 void setup() {
+  statusLed.begin();
+  statusLed.setBrightness(LED_BRIGHT);
+  setLed(255, 0, 0);  // solid red immediately; blink starts in blocking waits
+
   Serial.begin(115200);
   delay(500);
   Serial.println("\nTimelapse starting...");
 
   if (!initCamera()) {
     Serial.println("Camera init failed — halting");
-    while (true) delay(1000);
+    while (true) { tickLed(); delay(100); }
   }
 
   if (!initSD()) {
     Serial.println("SD init failed — halting");
-    while (true) delay(1000);
+    while (true) { tickLed(); delay(100); }
   }
 
   connectWiFi();
   syncNTP();
 
+  ledReady = true;
+  setLed(0, 255, 0);
   Serial.println("Setup complete — first capture in a moment");
 }
 
@@ -72,7 +106,10 @@ void setup() {
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi lost, reconnecting...");
+    ledReady = false;
     connectWiFi();
+    ledReady = true;
+    setLed(0, 255, 0);
   }
 
   unsigned long now = millis();
@@ -93,7 +130,8 @@ void connectWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.printf("Connecting to %s", WIFI_SSID);
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    tickLed();
+    delay(250);
     Serial.print(".");
   }
   Serial.printf("\nWiFi connected: %s\n", WiFi.localIP().toString().c_str());
@@ -108,8 +146,9 @@ void syncNTP() {
   Serial.print("Waiting for NTP sync");
   struct tm timeinfo;
   while (!getLocalTime(&timeinfo)) {
+    tickLed();
     Serial.print(".");
-    delay(1000);
+    delay(250);
   }
   char buf[30];
   strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);

@@ -19,19 +19,25 @@ If WiFi or the Pi is unavailable, images accumulate on the SD card and are retri
 
 ## File structure
 
-Images are stored on the Pi under `/home/<username>/timelapse/`:
+Images are stored on the Pi under `/home/<username>/timelapse/`, grouped by camera name then date:
 
 ```
 /home/<username>/timelapse/
-  2026-04-23/
-    2026-04-23_06-00.jpg
-    2026-04-23_06-01.jpg
-    ...
-  2026-04-24/
-    ...
+  plant/
+    2026-04-23/
+      2026-04-23_06-00.jpg
+      2026-04-23_06-01.jpg
+      ...
+    2026-04-24/
+      ...
+  cam2/
+    2026-04-23/
+      ...
 ```
 
 The timestamp in every filename is UTC, with minute precision. Alphabetical order is chronological order — ffmpeg sorts correctly without extra flags.
+
+Camera identity is determined by the source IP of the upload request — no firmware change needed. Each camera must have a stable IP (configure a static DHCP reservation in your router). The IP → name mapping lives in `CAMERAS` at the top of `pi/server.py`.
 
 ## Setup
 
@@ -100,12 +106,14 @@ Then use `find` + `grep` to select the frames you want, pipe into a frames list,
 cd ~/timelapse
 ```
 
+Scope each `find` to a camera directory (e.g. `./plant`) to render a single camera's timelapse.
+
 ### Full year — 30-minute interval (~17,500 frames → ~12 min at 24fps)
 
 Best for showing the seasonal arc. Uses only shots taken at :00 and :30.
 
 ```bash
-find . -name "*.jpg" | grep -E "[0-9]{2}-(00|30)\.jpg$" | sort \
+find ./plant -name "*.jpg" | grep -E "[0-9]{2}-(00|30)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ~/path/to/make_timelapse.sh frames.txt year_30min.mp4
@@ -114,7 +122,7 @@ find . -name "*.jpg" | grep -E "[0-9]{2}-(00|30)\.jpg$" | sort \
 ### Full year — 60-minute interval (~8,760 frames → ~6 min at 24fps)
 
 ```bash
-find . -name "*.jpg" | grep -E "[0-9]{2}-00\.jpg$" | sort \
+find ./plant -name "*.jpg" | grep -E "[0-9]{2}-00\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ~/path/to/make_timelapse.sh frames.txt year_60min.mp4
@@ -123,7 +131,7 @@ find . -name "*.jpg" | grep -E "[0-9]{2}-00\.jpg$" | sort \
 ### Single month — 15-minute interval
 
 ```bash
-find ./2026-07-* -name "*.jpg" | grep -E "[0-9]{2}-(00|15|30|45)\.jpg$" | sort \
+find ./plant/2026-07-* -name "*.jpg" | grep -E "[0-9]{2}-(00|15|30|45)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ~/path/to/make_timelapse.sh frames.txt july_15min.mp4
@@ -132,8 +140,8 @@ find ./2026-07-* -name "*.jpg" | grep -E "[0-9]{2}-(00|15|30|45)\.jpg$" | sort \
 ### Single week — 5-minute interval
 
 ```bash
-find ./2026-07-14 ./2026-07-15 ./2026-07-16 ./2026-07-17 \
-     ./2026-07-18 ./2026-07-19 ./2026-07-20 \
+find ./plant/2026-07-14 ./plant/2026-07-15 ./plant/2026-07-16 ./plant/2026-07-17 \
+     ./plant/2026-07-18 ./plant/2026-07-19 ./plant/2026-07-20 \
   -name "*.jpg" | grep -E "[0-9]{2}-(00|05|10|15|20|25|30|35|40|45|50|55)\.jpg$" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
@@ -143,7 +151,7 @@ find ./2026-07-14 ./2026-07-15 ./2026-07-16 ./2026-07-17 \
 ### Single day — all frames, 1-minute interval (~1,440 frames → ~60 sec at 24fps)
 
 ```bash
-find ./2026-07-15 -name "*.jpg" | sort \
+find ./plant/2026-07-15 -name "*.jpg" | sort \
   | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
 
 ~/path/to/make_timelapse.sh frames.txt day_2026-07-15.mp4
@@ -203,15 +211,28 @@ Open `http://192.168.1.xxx:5000` in a browser to browse images on the Pi.
 
 > **macOS Tahoe:** Go to System Settings → Privacy & Security → Local Network and enable access for your browser if it can't reach the Pi.
 
-- **`/`** — list of all days, newest first, with image count per day
-- **`/day/<date>`** — hours in that day, with image count per hour
-- **`/day/<date>/<hour>`** — full image grid for that hour, lazy-loaded
+- **`/`** — list of all cameras with total image count
+- **`/<camera>`** — list of all days for that camera, newest first
+- **`/<camera>/day/<date>`** — hours in that day, with image count per hour
+- **`/<camera>/day/<date>/<hour>`** — full image grid for that hour, lazy-loaded
 
 Clicking any image opens it at full XGA resolution in a new tab.
 
+### Adding a camera
+
+1. Assign the new ESP32 a static IP in the router's DHCP reservation settings.
+2. Add the entry to `CAMERAS` in `pi/server.py`:
+   ```python
+   CAMERAS = {
+       "192.168.1.73":  "plant",
+       "192.168.1.101": "new-camera",
+   }
+   ```
+3. Run `./deploy.sh` to push the updated server to the Pi.
+
 ## Monitoring
 
-Check image count and disk space:
+Check image count per camera and disk space:
 ```bash
 curl http://192.168.1.xxx:5000/status
 ```

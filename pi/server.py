@@ -2,10 +2,13 @@
 """
 Timelapse image receiver — runs on Raspberry Pi.
 
-Receives JPEG POSTs from the ESP32-S3 and saves them into:
-  BASE_DIR/<X-Folder>/<X-Filename>
+Receives JPEG POSTs from ESP32-S3 cameras and saves them into:
+  BASE_DIR/<camera>/<X-Folder>/<X-Filename>
 
-e.g. /home/<username>/timelapse/2026-04-23/2026-04-23_14-30.jpg
+e.g. /home/<username>/timelapse/garden/2026-04-23/2026-04-23_14-30.jpg
+
+Camera identity is determined by the source IP of the upload request.
+Each camera must have a stable IP (static DHCP reservation recommended).
 
 Start manually:  python3 server.py
 As a service:    see timelapse.service
@@ -22,6 +25,13 @@ from markupsafe import escape
 BASE_DIR = "/home/<username>/timelapse"   # where images are stored
 PORT     = 5000
 HOST     = "0.0.0.0"             # accept from any network interface
+
+# Map each camera's fixed IP to a friendly name used as the directory name.
+# Assign static IPs via your router's DHCP reservation settings.
+CAMERAS = {
+     "192.168.1.73": "plant",
+     "192.168.1.243": "cam2",
+}
 
 # -----------------------------------------------------------------------------
 
@@ -73,22 +83,28 @@ def page(title, body):
 
 @app.route("/")
 def index():
-    """List all days, newest first."""
+    """List all cameras."""
     if not os.path.isdir(BASE_DIR):
         return page("Timelapse", "<h1>Timelapse</h1><p>No images yet.</p>")
 
-    days = sorted(
-        [d for d in os.listdir(BASE_DIR) if os.path.isdir(os.path.join(BASE_DIR, d))],
-        reverse=True,
+    cameras = sorted(
+        d for d in os.listdir(BASE_DIR)
+        if os.path.isdir(os.path.join(BASE_DIR, d))
     )
 
+    if not cameras:
+        return page("Timelapse", "<h1>Timelapse</h1><p>No images yet.</p>")
+
     cards = ""
-    for day in days:
-        day_dir = os.path.join(BASE_DIR, day)
-        count = sum(1 for f in os.listdir(day_dir) if f.endswith(".jpg"))
+    for cam in cameras:
+        cam_dir = os.path.join(BASE_DIR, cam)
+        count = sum(
+            1 for _, _, files in os.walk(cam_dir)
+            for f in files if f.endswith(".jpg")
+        )
         cards += f"""
         <div class="card">
-          <a href="/day/{escape(day)}">{escape(day)}</a>
+          <a href="/{escape(cam)}">{escape(cam)}</a>
           <div class="count">{count} image{"s" if count != 1 else ""}</div>
         </div>"""
 
@@ -96,19 +112,46 @@ def index():
     return page("Timelapse", body)
 
 
-@app.route("/day/<date>")
-def day(date):
+@app.route("/<camera>")
+def camera_index(camera):
+    """List all days for a camera, newest first."""
+    camera = str(escape(camera))
+    cam_dir = os.path.join(BASE_DIR, camera)
+    if not os.path.isdir(cam_dir):
+        abort(404)
+
+    days = sorted(
+        [d for d in os.listdir(cam_dir) if os.path.isdir(os.path.join(cam_dir, d))],
+        reverse=True,
+    )
+
+    cards = ""
+    for day in days:
+        day_dir = os.path.join(cam_dir, day)
+        count = sum(1 for f in os.listdir(day_dir) if f.endswith(".jpg"))
+        cards += f"""
+        <div class="card">
+          <a href="/{escape(camera)}/day/{escape(day)}">{escape(day)}</a>
+          <div class="count">{count} image{"s" if count != 1 else ""}</div>
+        </div>"""
+
+    breadcrumb = f'<div class="breadcrumb"><a href="/">Timelapse</a> › {escape(camera)}</div>'
+    body = f"{breadcrumb}<h1>{escape(camera)}</h1><div class='grid'>{cards}</div>"
+    return page(camera, body)
+
+
+@app.route("/<camera>/day/<date>")
+def day(camera, date):
     """List hours for a day, with image count per hour."""
-    date = str(escape(date))
-    day_dir = os.path.join(BASE_DIR, date)
+    camera = str(escape(camera))
+    date   = str(escape(date))
+    day_dir = os.path.join(BASE_DIR, camera, date)
     if not os.path.isdir(day_dir):
         abort(404)
 
-    # Group images by hour
     hours = {}
     for fname in os.listdir(day_dir):
         if fname.endswith(".jpg"):
-            # filename: 2026-04-23_14-30.jpg  → hour = "14"
             try:
                 hour = fname.split("_")[1].split("-")[0]
                 hours.setdefault(hour, 0)
@@ -122,21 +165,28 @@ def day(date):
         label = f"{hour}:00 – {hour}:59 UTC"
         cards += f"""
         <div class="card">
-          <a href="/day/{escape(date)}/{escape(hour)}">{label}</a>
+          <a href="/{escape(camera)}/day/{escape(date)}/{escape(hour)}">{label}</a>
           <div class="count">{count} image{"s" if count != 1 else ""}</div>
         </div>"""
 
-    breadcrumb = f'<div class="breadcrumb"><a href="/">Timelapse</a> › {escape(date)}</div>'
+    breadcrumb = (
+        f'<div class="breadcrumb">'
+        f'<a href="/">Timelapse</a> › '
+        f'<a href="/{escape(camera)}">{escape(camera)}</a> › '
+        f'{escape(date)}'
+        f'</div>'
+    )
     body = f"{breadcrumb}<h1>{escape(date)}</h1><div class='grid'>{cards}</div>"
     return page(date, body)
 
 
-@app.route("/day/<date>/<hour>")
-def hour_view(date, hour):
+@app.route("/<camera>/day/<date>/<hour>")
+def hour_view(camera, date, hour):
     """Show all images for one hour as a grid."""
-    date = str(escape(date))
-    hour = str(escape(hour))
-    day_dir = os.path.join(BASE_DIR, date)
+    camera = str(escape(camera))
+    date   = str(escape(date))
+    hour   = str(escape(hour))
+    day_dir = os.path.join(BASE_DIR, camera, date)
     if not os.path.isdir(day_dir):
         abort(404)
 
@@ -153,8 +203,8 @@ def hour_view(date, hour):
         minute = fname.split("-")[-1].replace(".jpg", "")
         grid += f"""
         <div>
-          <a href="/img/{escape(date)}/{escape(fname)}" target="_blank">
-            <img src="/img/{escape(date)}/{escape(fname)}" loading="lazy" alt="{escape(fname)}">
+          <a href="/img/{escape(camera)}/{escape(date)}/{escape(fname)}" target="_blank">
+            <img src="/img/{escape(camera)}/{escape(date)}/{escape(fname)}" loading="lazy" alt="{escape(fname)}">
           </a>
           <div class="img-label">{escape(hour)}:{escape(minute)} UTC</div>
         </div>"""
@@ -162,7 +212,8 @@ def hour_view(date, hour):
     breadcrumb = (
         f'<div class="breadcrumb">'
         f'<a href="/">Timelapse</a> › '
-        f'<a href="/day/{escape(date)}">{escape(date)}</a> › '
+        f'<a href="/{escape(camera)}">{escape(camera)}</a> › '
+        f'<a href="/{escape(camera)}/day/{escape(date)}">{escape(date)}</a> › '
         f'{escape(hour)}:00 – {escape(hour)}:59 UTC'
         f'</div>'
     )
@@ -171,18 +222,24 @@ def hour_view(date, hour):
     return page(title, body)
 
 
-@app.route("/img/<date>/<filename>")
-def serve_image(date, filename):
+@app.route("/img/<camera>/<date>/<filename>")
+def serve_image(camera, date, filename):
     """Serve a JPEG from the timelapse directory."""
+    camera   = str(escape(camera))
     date     = str(escape(date))
     filename = str(escape(filename))
-    return send_from_directory(os.path.join(BASE_DIR, date), filename)
+    return send_from_directory(os.path.join(BASE_DIR, camera, date), filename)
 
 
 # --- Upload ------------------------------------------------------------------
 
 @app.route("/upload", methods=["POST"])
 def upload():
+    camera = CAMERAS.get(request.remote_addr)
+    if not camera:
+        log.warning("Upload rejected from unknown IP: %s", request.remote_addr)
+        abort(403, "Unknown camera")
+
     folder   = request.headers.get("X-Folder")
     filename = request.headers.get("X-Filename")
 
@@ -199,7 +256,7 @@ def upload():
         log.warning("Rejected non-JPEG filename: %s", filename)
         abort(400, "Only .jpg files accepted")
 
-    dest_dir  = os.path.join(BASE_DIR, folder)
+    dest_dir  = os.path.join(BASE_DIR, camera, folder)
     dest_path = os.path.join(dest_dir, filename)
 
     os.makedirs(dest_dir, exist_ok=True)
@@ -214,7 +271,7 @@ def upload():
             f.write(chunk)
 
     size_kb = os.path.getsize(dest_path) / 1024
-    log.info("Saved  %s/%s  (%.1f KB)", folder, filename, size_kb)
+    log.info("Saved  %s/%s/%s  (%.1f KB)", camera, folder, filename, size_kb)
 
     return "OK", 200
 
@@ -223,10 +280,14 @@ def upload():
 
 @app.route("/status", methods=["GET"])
 def status():
-    """Quick health check — also reports image count and disk usage."""
-    total = 0
-    for _, _, files in os.walk(BASE_DIR):
-        total += sum(1 for f in files if f.endswith(".jpg"))
+    """Quick health check — reports image count per camera and disk usage."""
+    per_camera = {}
+    for cam in os.listdir(BASE_DIR):
+        cam_dir = os.path.join(BASE_DIR, cam)
+        if not os.path.isdir(cam_dir):
+            continue
+        count = sum(1 for _, _, files in os.walk(cam_dir) for f in files if f.endswith(".jpg"))
+        per_camera[cam] = count
 
     statvfs  = os.statvfs(BASE_DIR)
     free_gb  = (statvfs.f_frsize * statvfs.f_bavail) / (1024 ** 3)
@@ -234,7 +295,8 @@ def status():
 
     return {
         "status":        "ok",
-        "images":        total,
+        "cameras":       per_camera,
+        "images":        sum(per_camera.values()),
         "disk_free_gb":  round(free_gb, 2),
         "disk_total_gb": round(total_gb, 2),
     }, 200
