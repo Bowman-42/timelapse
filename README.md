@@ -98,12 +98,12 @@ First download and clean up images from the Pi using the download script:
 ./download.sh
 ```
 
-This transfers all images to `~/timelapse/` and deletes them from the Pi as they are confirmed received — keeping the Pi's SD card free for the next period. A confirmation prompt is shown before anything is deleted.
+This transfers all images to `LOCAL_DIR` (set in `pi.conf`) and deletes them from the Pi as they are confirmed received — keeping the Pi's SD card free for the next period. A confirmation prompt is shown before anything is deleted.
 
 Then use `find` + `grep` to select the frames you want, pipe into a frames list, and pass it to `make_timelapse.sh`. macOS creates hidden `._` resource fork files alongside every JPEG — the script filters these out automatically, so you don't need to exclude them in your `find` command.
 
 ```bash
-cd ~/timelapse
+cd "$LOCAL_DIR"   # e.g. /Volumes/YourDriveName/timelapse
 ```
 
 Scope each `find` to a camera directory (e.g. `./plant`) to render a single camera's timelapse.
