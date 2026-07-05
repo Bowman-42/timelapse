@@ -64,6 +64,8 @@ void syncNTP();
 bool initCamera();
 bool initSD();
 void captureAndProcess();
+bool uploadBuffer(const uint8_t* buf, size_t len, const char* folder, const char* filename);
+bool saveToSD(const uint8_t* buf, size_t len, const char* folder, const char* filename);
 bool uploadFile(const char* filepath, const char* folder, const char* filename);
 void retryPending();
 void getTimeStrings(char* folder, size_t folderLen, char* filename, size_t filenameLen);
@@ -229,14 +231,72 @@ void getTimeStrings(char* folder, size_t folderLen, char* filename, size_t filen
 }
 
 // =============================================================================
-// Capture and save
+// Upload directly from framebuffer — SD untouched
+// =============================================================================
+
+bool uploadBuffer(const uint8_t* buf, size_t len,
+                  const char* folder, const char* filename) {
+  char url[50];
+  snprintf(url, sizeof(url), "http://%s:%d/upload", SERVER_IP, SERVER_PORT);
+
+  HTTPClient http;
+  http.begin(url);
+  http.setConnectTimeout(5000);
+  http.setTimeout(20000);
+  http.addHeader("Content-Type", "image/jpeg");
+  http.addHeader("X-Folder",    folder);
+  http.addHeader("X-Filename",  filename);
+
+  int code = http.POST((uint8_t*)buf, len);
+  http.end();
+
+  if (code == 200) {
+    Serial.printf("Uploaded: %s\n", filename);
+    return true;
+  }
+  Serial.printf("Upload failed: %s — HTTP %d\n", filename, code);
+  return false;
+}
+
+// =============================================================================
+// Save to SD — only when upload fails or WiFi is down
+// =============================================================================
+
+bool saveToSD(const uint8_t* buf, size_t len,
+              const char* folder, const char* filename) {
+  char dirPath[13];
+  snprintf(dirPath, sizeof(dirPath), "/%s", folder);
+  if (!SD_MMC.exists(dirPath)) SD_MMC.mkdir(dirPath);
+
+  char filepath[40];
+  snprintf(filepath, sizeof(filepath), "/%s/%s", folder, filename);
+
+  File f = SD_MMC.open(filepath, FILE_WRITE);
+  if (!f) {
+    Serial.printf("SD open failed: %s\n", filepath);
+    return false;
+  }
+  size_t written = f.write(buf, len);
+  f.close();
+
+  if (written != len) {
+    Serial.printf("SD write incomplete: %s (%d/%d bytes) — removing\n",
+                  filepath, written, len);
+    SD_MMC.remove(filepath);
+    return false;
+  }
+  Serial.printf("Queued on SD: %s (%d bytes)\n", filepath, len);
+  return true;
+}
+
+// =============================================================================
+// Capture and process
 // =============================================================================
 
 void captureAndProcess() {
   char folder[11];
   char filename[21];
   getTimeStrings(folder, sizeof(folder), filename, sizeof(filename));
-
   Serial.printf("Capturing %s\n", filename);
 
   camera_fb_t *fb = esp_camera_fb_get();
@@ -245,38 +305,18 @@ void captureAndProcess() {
     return;
   }
 
-  // Create date directory if needed
-  char dirPath[13];
-  snprintf(dirPath, sizeof(dirPath), "/%s", folder);
-  if (!SD_MMC.exists(dirPath)) {
-    SD_MMC.mkdir(dirPath);
-  }
-
-  // Save to SD
-  char filepath[40];
-  snprintf(filepath, sizeof(filepath), "/%s/%s", folder, filename);
-
-  File f = SD_MMC.open(filepath, FILE_WRITE);
-  if (f) {
-    f.write(fb->buf, fb->len);
-    f.close();
-    Serial.printf("Saved: %s (%d bytes)\n", filepath, fb->len);
+  if (WiFi.status() == WL_CONNECTED) {
+    // Happy path: upload straight from framebuffer, SD never touched
+    if (!uploadBuffer(fb->buf, fb->len, folder, filename)) {
+      // Upload failed — queue on SD for retryPending
+      saveToSD(fb->buf, fb->len, folder, filename);
+    }
   } else {
-    Serial.printf("SD write failed: %s\n", filepath);
-    esp_camera_fb_return(fb);
-    return;
+    Serial.println("WiFi down — queuing on SD");
+    saveToSD(fb->buf, fb->len, folder, filename);
   }
 
   esp_camera_fb_return(fb);
-
-  // Attempt immediate upload — delete from SD on success
-  if (WiFi.status() == WL_CONNECTED) {
-    if (uploadFile(filepath, folder, filename)) {
-      SD_MMC.remove(filepath);
-    }
-  } else {
-    Serial.println("WiFi down — image queued on SD");
-  }
 }
 
 // =============================================================================
@@ -291,12 +331,20 @@ bool uploadFile(const char* filepath, const char* folder, const char* filename) 
     return false;
   }
   size_t fileSize = f.size();
+  if (fileSize == 0) {
+    f.close();
+    Serial.printf("Skipping empty file: %s\n", filepath);
+    SD_MMC.remove(filepath);  // corrupt — won't get better on retry
+    return true;              // treat as "done" so retryPending moves on
+  }
 
   char url[50];
   snprintf(url, sizeof(url), "http://%s:%d/upload", SERVER_IP, SERVER_PORT);
 
   HTTPClient http;
   http.begin(url);
+  http.setConnectTimeout(5000);   // 5 s TCP connect
+  http.setTimeout(20000);         // 20 s for server to respond
   http.addHeader("Content-Type", "image/jpeg");
   http.addHeader("X-Folder",   folder);
   http.addHeader("X-Filename", filename);

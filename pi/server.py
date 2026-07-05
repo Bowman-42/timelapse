@@ -31,7 +31,7 @@ HOST     = "0.0.0.0"             # accept from any network interface
 CAMERAS = {
      "192.168.1.73": "plant",
      "192.168.1.243": "cam2",
-     "192.168.1.98": "cam3",
+     "192.168.1.195": "cam3",
 }
 
 # -----------------------------------------------------------------------------
@@ -238,8 +238,10 @@ def serve_image(camera, date, filename):
 def upload():
     camera = CAMERAS.get(request.remote_addr)
     if not camera:
-        log.warning("Upload rejected from unknown IP: %s", request.remote_addr)
-        abort(403, "Unknown camera")
+        # Use last two octets as name for unregistered cameras (e.g. "1.73")
+        parts = request.remote_addr.rsplit(".", 2)
+        camera = ".".join(parts[-2:]) if len(parts) >= 3 else request.remote_addr
+        log.info("Upload from unregistered IP %s — using name %r", request.remote_addr, camera)
 
     folder   = request.headers.get("X-Folder")
     filename = request.headers.get("X-Filename")

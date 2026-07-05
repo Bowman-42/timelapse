@@ -11,11 +11,11 @@ Year-long timelapse project using an ESP32-S3 Eye camera at 65°N. Captures the 
 ## How it works
 
 The ESP32 captures one JPEG per minute at XGA (1024×768) resolution. Each image is:
-1. Saved to the SD card immediately
-2. Uploaded to the Pi over WiFi via HTTP POST
-3. Deleted from the SD card after a confirmed upload
+1. Uploaded directly to the Pi over WiFi via HTTP POST (framebuffer → network, SD never written)
+2. If the upload fails or WiFi is down, the image is saved to the SD card as a queue entry
+3. Queued images are retried automatically — oldest first — once connectivity returns
 
-If WiFi or the Pi is unavailable, images accumulate on the SD card and are retried automatically — oldest first — once connectivity returns.
+The SD card is purely a fallback buffer. Under normal conditions (WiFi up, Pi reachable) it is never touched, which reduces SD wear.
 
 ## File structure
 
@@ -100,64 +100,82 @@ First download and clean up images from the Pi using the download script:
 
 This transfers all images to `LOCAL_DIR` (set in `pi.conf`) and deletes them from the Pi as they are confirmed received — keeping the Pi's SD card free for the next period. A confirmation prompt is shown before anything is deleted.
 
-Then use `find` + `grep` to select the frames you want, pipe into a frames list, and pass it to `make_timelapse.sh`. macOS creates hidden `._` resource fork files alongside every JPEG — the script filters these out automatically, so you don't need to exclude them in your `find` command.
+### Selecting frames — `select_frames.sh`
 
-```bash
-cd "$LOCAL_DIR"   # e.g. /Volumes/YourDriveName/timelapse
+`select_frames.sh` builds a `frames.txt` suitable for `make_timelapse.sh`. It reads `LOCAL_DIR` from `pi.conf` automatically.
+
+```
+Usage: ./select_frames.sh -c <cam> [-d <date>] [-i <interval>] [-o <output>]
+
+  -c, --cam        Camera name (required, e.g. plant)
+  -d, --date       Starting date YYYY-MM-DD — include this day and all following (default: all)
+  -i, --interval   Keep every Nth frame, 1 = all (default: 1)
+  -o, --output     Output file (default: frames.txt)
 ```
 
-Scope each `find` to a camera directory (e.g. `./plant`) to render a single camera's timelapse.
-
-### Full year — 30-minute interval (~17,500 frames → ~12 min at 24fps)
-
-Best for showing the seasonal arc. Uses only shots taken at :00 and :30.
+Examples:
 
 ```bash
-find ./plant -name "*.jpg" | grep -E "[0-9]{2}-(00|30)\.jpg$" | sort \
-  | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
+# All frames for plant camera (full history)
+./select_frames.sh --cam plant
 
-~/path/to/make_timelapse.sh frames.txt year_30min.mp4
+# From a date onwards, every 30th frame (~30-minute intervals at 1 fps capture)
+./select_frames.sh --cam plant --date 2026-07-01 --interval 30 --output july_30min.txt
+
+# Single day, every 5th frame
+./select_frames.sh --cam plant --date 2026-07-15 --interval 5
+
+# Then render:
+./make_timelapse.sh frames.txt output.mp4
 ```
 
-### Full year — 60-minute interval (~8,760 frames → ~6 min at 24fps)
+macOS creates hidden `._` resource fork files alongside every JPEG — `select_frames.sh` and `make_timelapse.sh` both filter these out automatically.
+
+### Batch rendering — `batch_timelapse.sh`
+
+Renders one timelapse per camera per day automatically. Already-rendered files are skipped unless new frames have arrived since the last render.
 
 ```bash
-find ./plant -name "*.jpg" | grep -E "[0-9]{2}-00\.jpg$" | sort \
-  | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
-
-~/path/to/make_timelapse.sh frames.txt year_60min.mp4
+./batch_timelapse.sh                    # output to current directory
+./batch_timelapse.sh /Volumes/Drive/out # output to a specific directory
 ```
 
-### Single month — 15-minute interval
+Output files are named `<camera><date>.mp4` (e.g. `plant2026-07-15.mp4`). Reads `LOCAL_DIR` from `pi.conf`.
 
+### Rotating frames — `rotate_frames.sh`
+
+If a camera was mounted upside-down for a period, use this to fix the frames in-place. Rotation is lossless (via `jpegtran`) and each corrected file is tagged with a JPEG comment so already-rotated images are never processed twice.
+
+Requires `libjpeg-turbo` and `exiftool`:
 ```bash
-find ./plant/2026-07-* -name "*.jpg" | grep -E "[0-9]{2}-(00|15|30|45)\.jpg$" | sort \
-  | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
-
-~/path/to/make_timelapse.sh frames.txt july_15min.mp4
+brew install jpeg-turbo exiftool
 ```
 
-### Single week — 5-minute interval
+```
+Usage: ./rotate_frames.sh <camera> <from_timestamp>
 
-```bash
-find ./plant/2026-07-14 ./plant/2026-07-15 ./plant/2026-07-16 ./plant/2026-07-17 \
-     ./plant/2026-07-18 ./plant/2026-07-19 ./plant/2026-07-20 \
-  -name "*.jpg" | grep -E "[0-9]{2}-(00|05|10|15|20|25|30|35|40|45|50|55)\.jpg$" | sort \
-  | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
-
-~/path/to/make_timelapse.sh frames.txt week_5min.mp4
+  camera          — e.g. plant, cam2
+  from_timestamp  — inclusive start, matched as filename prefix:
+                    2026-05-30        (whole day onwards)
+                    2026-05-30_10-30  (from 10:30 UTC onwards)
 ```
 
-### Single day — all frames, 1-minute interval (~1,440 frames → ~60 sec at 24fps)
+Example:
+```bash
+./rotate_frames.sh plant 2026-05-30
+./rotate_frames.sh plant 2026-05-30_10-30
+```
+
+A confirmation prompt is shown before any files are modified.
+
+### Single-day render
 
 ```bash
-find ./plant/2026-07-15 -name "*.jpg" | sort \
-  | sed "s|^|file '$(pwd)/|; s|$|'|" > frames.txt
-
-~/path/to/make_timelapse.sh frames.txt day_2026-07-15.mp4
+./select_frames.sh --cam plant --date 2026-07-15 -o frames.txt
+./make_timelapse.sh frames.txt day_2026-07-15.mp4
 
 # Slower playback (12fps):
-~/path/to/make_timelapse.sh frames.txt day_2026-07-15_slow.mp4 12
+./make_timelapse.sh frames.txt day_2026-07-15_slow.mp4 12
 ```
 
 ### Timestamp overlay
@@ -165,7 +183,7 @@ find ./plant/2026-07-15 -name "*.jpg" | sort \
 Add `--timestamp` to burn the UTC date and time onto each frame:
 
 ```bash
-~/path/to/make_timelapse.sh frames.txt day_timestamped.mp4 24 --timestamp
+./make_timelapse.sh frames.txt day_timestamped.mp4 24 --timestamp
 ```
 
 This generates a per-frame SRT subtitle file (via libass) and burns it into the video. Temp files (`frames_clean.txt`, `timestamps.srt`) are cleaned up automatically when the script exits.
@@ -188,13 +206,13 @@ XGA (1024×768) is 4:3. All examples above use 1080p letterboxed to 16:9 (black 
 
 All tiers are derived from the 1-minute source — no re-shooting needed.
 
-| Tier | grep pattern | Frames/year | Video @ 24fps |
+| Tier | `--interval` | Frames/year | Video @ 24fps |
 |------|-------------|-------------|---------------|
-| 1 min | `*.jpg` (all) | ~525,000 | ~6 hours |
-| 5 min | `[0-9]{2}-(00\|05\|10\|15\|20\|25\|30\|35\|40\|45\|50\|55)\.jpg` | ~105,000 | ~73 min |
-| 15 min | `[0-9]{2}-(00\|15\|30\|45)\.jpg` | ~35,000 | ~24 min |
-| 30 min | `[0-9]{2}-(00\|30)\.jpg` | ~17,500 | ~12 min |
-| 60 min | `[0-9]{2}-00\.jpg` | ~8,760 | ~6 min |
+| 1 min | `1` (all) | ~525,000 | ~6 hours |
+| 5 min | `5` | ~105,000 | ~73 min |
+| 15 min | `15` | ~35,000 | ~24 min |
+| 30 min | `30` | ~17,500 | ~12 min |
+| 60 min | `60` | ~8,760 | ~6 min |
 
 ## Storage reference
 
@@ -229,6 +247,8 @@ Clicking any image opens it at full XGA resolution in a new tab.
    }
    ```
 3. Run `./deploy.sh` to push the updated server to the Pi.
+
+Cameras not listed in `CAMERAS` are still accepted — the server uses the last two octets of the source IP as the camera name (e.g. `192.168.1.101` → `1.101`). This lets a new camera start uploading immediately while you decide on a permanent name.
 
 ## Monitoring
 
