@@ -93,6 +93,13 @@ For all future updates to `server.py`, use the deploy script — it substitutes 
 
 ## Rendering on Mac
 
+Requires `ffmpeg`. Homebrew's default `ffmpeg` formula is built **without libass**, so it has no `subtitles` filter — needed for the `--timestamp` overlay in `make_timelapse.sh`. Install the full build instead:
+```bash
+brew install ffmpeg-full
+brew link --overwrite ffmpeg-full
+```
+(`ffmpeg-full` is keg-only, so it needs an explicit link. Plain `brew install ffmpeg` is fine if you never use `--timestamp`.)
+
 First download and clean up images from the Pi using the download script:
 ```bash
 ./download.sh
@@ -186,7 +193,7 @@ Add `--timestamp` to burn the UTC date and time onto each frame:
 ./make_timelapse.sh frames.txt day_timestamped.mp4 24 --timestamp
 ```
 
-This generates a per-frame SRT subtitle file (via libass) and burns it into the video. Temp files (`frames_clean.txt`, `timestamps.srt`) are cleaned up automatically when the script exits.
+This generates a per-frame SRT subtitle file and burns it in via ffmpeg's `subtitles` filter, which requires `ffmpeg-full` (see [Rendering on Mac](#rendering-on-mac) above) — the default `ffmpeg` formula lacks libass and will fail with a filter-parsing error. Temp files (`frames_clean.txt`, `timestamps.srt`) are cleaned up automatically when the script exits.
 
 ### Output format options
 
