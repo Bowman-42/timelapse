@@ -7,6 +7,20 @@
 
 set -e
 
+usage() {
+  cat <<'EOF'
+Usage: download.sh
+
+Download images from the Pi to LOCAL_DIR and remove them from the Pi once
+confirmed transferred. Reads PI_USER, PI_IP, and LOCAL_DIR from pi.conf.
+A confirmation prompt is shown before any files are deleted from the Pi.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONF="$SCRIPT_DIR/pi.conf"
 

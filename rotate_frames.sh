@@ -15,6 +15,29 @@
 
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+Usage: rotate_frames.sh <camera> <from_timestamp>
+
+  camera          Camera name, e.g. plant, cam2, cam3
+  from_timestamp  Inclusive start, matched as a filename prefix:
+                    2026-05-30        (whole day onwards)
+                    2026-05-30_10-30  (from 10:30 UTC onwards)
+
+Requires jpegtran (brew install jpeg-turbo) and exiftool (brew install exiftool).
+Rotation is lossless and each corrected file is tagged so it's never rotated twice.
+A confirmation prompt is shown before any files are modified.
+
+Examples:
+  ./rotate_frames.sh plant 2026-05-30
+  ./rotate_frames.sh plant 2026-05-30_10-30
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 if ! command -v jpegtran &>/dev/null; then
   echo "Error: jpegtran not found. Install with: brew install jpeg-turbo" >&2
   exit 1

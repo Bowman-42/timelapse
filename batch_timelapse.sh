@@ -10,6 +10,22 @@
 
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+Usage: batch_timelapse.sh [output_dir]
+
+  output_dir  Where to write .mp4 files (default: current directory)
+
+Renders one timelapse per camera per day from frames stored in LOCAL_DIR
+(read from pi.conf). Already-rendered files are skipped unless new frames
+have arrived since the last render. Output files are named <camera><date>.mp4.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONF="$SCRIPT_DIR/pi.conf"
 MAKE_TIMELAPSE="$SCRIPT_DIR/make_timelapse.sh"

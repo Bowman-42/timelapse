@@ -11,6 +11,26 @@
 
 set -e
 
+usage() {
+  cat <<'EOF'
+Usage: make_timelapse.sh <frames.txt> <output.mp4> [fps] [--timestamp]
+
+  frames.txt   Input file listing frames (see select_frames.sh)
+  output.mp4   Output video path (default: timelapse.mp4)
+  fps          Frames per second (default: 24)
+  --timestamp  Burn a UTC timestamp overlay onto each frame
+               (requires ffmpeg-full — see README's "Rendering on Mac" section)
+
+Examples:
+  ./make_timelapse.sh frames.txt year.mp4
+  ./make_timelapse.sh frames.txt year.mp4 24 --timestamp
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 FRAMES=${1:-frames.txt}
 OUTPUT=${2:-timelapse.mp4}
 FPS=${3:-24}

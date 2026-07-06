@@ -6,6 +6,20 @@
 
 set -e
 
+usage() {
+  cat <<'EOF'
+Usage: deploy.sh
+
+Deploy Pi server files (pi/server.py, pi/timelapse.service) — substitutes
+<username> on the fly and restarts the timelapse service. Reads PI_USER and
+PI_IP from pi.conf. Source files on disk are never modified.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONF="$SCRIPT_DIR/pi.conf"
 
