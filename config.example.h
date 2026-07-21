@@ -10,6 +10,10 @@
 #define SERVER_PORT 5000
 
 // Capture
+// Below 60000 (1 minute), filenames get second-resolution timestamps
+// (HH-MM-SS.jpg) instead of the default HH-MM.jpg — see getTimeStrings()
+// in Timelapse.ino. This keeps existing 1-min-or-slower cameras' output
+// unchanged even if they're reflashed with this same sketch.
 #define CAPTURE_INTERVAL_MS 60000UL   // 1 minute
 
 // Camera

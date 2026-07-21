@@ -10,7 +10,7 @@ Year-long timelapse project using an ESP32-S3 Eye camera at 65°N. Captures the 
 
 ## How it works
 
-The ESP32 captures one JPEG per minute at XGA (1024×768) resolution. Each image is:
+The ESP32 captures one JPEG every `CAPTURE_INTERVAL_MS` (default: 1 minute, set per-device in `config.h`) at XGA (1024×768) resolution. Each image is:
 1. Uploaded directly to the Pi over WiFi via HTTP POST (framebuffer → network, SD never written)
 2. If the upload fails or WiFi is down, the image is saved to the SD card as a queue entry
 3. Queued images are retried automatically — oldest first — once connectivity returns
@@ -35,7 +35,7 @@ Images are stored on the Pi under `/home/<username>/timelapse/`, grouped by came
       ...
 ```
 
-The timestamp in every filename is UTC, with minute precision. Alphabetical order is chronological order — ffmpeg sorts correctly without extra flags.
+The timestamp in every filename is UTC. Cameras capturing at 1-minute intervals or slower use minute precision (`HH-MM.jpg`); cameras configured with `CAPTURE_INTERVAL_MS` below 60000 (sub-minute capture, e.g. for short high-frequency projects) automatically get second precision instead (`HH-MM-SS.jpg`) so frames don't overwrite each other. This is determined at compile time from each camera's own `config.h`, so existing cameras keep their current filename format even if reflashed with the same sketch. Either way, alphabetical order is chronological order — ffmpeg sorts correctly without extra flags.
 
 Camera identity is determined by the source IP of the upload request — no firmware change needed. Each camera must have a stable IP (configure a static DHCP reservation in your router). The IP → name mapping lives in `CAMERAS` at the top of `pi/server.py`.
 
@@ -268,3 +268,7 @@ Check server logs:
 ```bash
 tail -f /home/<username>/timelapse-server/server.log
 ```
+
+## Known limitations
+
+- The `/` and `/status` dashboard pages count images by walking every file in each camera's full history on every request (`server.py`: `index()`, `status()`). Fine at low-frequency, low-traffic use — but on a camera with a very high image count (e.g. a short project shooting at sub-minute intervals) these pages will get progressively slower to load. Not a capture/upload reliability issue, purely cosmetic. Worth optimizing (cache the count, or drop the full walk) if the dashboard ever becomes annoying to use.

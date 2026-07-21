@@ -221,13 +221,21 @@ bool initSD() {
 // Time helpers
 // =============================================================================
 
-// folder   → "2026-04-23"        (needs 11 bytes)
-// filename → "2026-04-23_18-23.jpg" (needs 21 bytes)
+// folder   → "2026-04-23"               (needs 11 bytes)
+// filename → "2026-04-23_18-23.jpg"      (needs 21 bytes, CAPTURE_INTERVAL_MS >= 1 min)
+//          → "2026-04-23_18-23-45.jpg"   (needs 24 bytes, CAPTURE_INTERVAL_MS <  1 min)
 void getTimeStrings(char* folder, size_t folderLen, char* filename, size_t filenameLen) {
   struct tm timeinfo;
   getLocalTime(&timeinfo);
-  strftime(folder,   folderLen,   "%Y-%m-%d",          &timeinfo);
+  strftime(folder, folderLen, "%Y-%m-%d", &timeinfo);
+#if CAPTURE_INTERVAL_MS < 60000UL
+  // Sub-minute captures need second resolution, or frames overwrite each other
+  strftime(filename, filenameLen, "%Y-%m-%d_%H-%M-%S.jpg", &timeinfo);
+#else
+  // 1 minute or slower — keep the original format so existing cameras'
+  // output is unchanged even if they're reflashed with this same sketch
   strftime(filename, filenameLen, "%Y-%m-%d_%H-%M.jpg", &timeinfo);
+#endif
 }
 
 // =============================================================================
@@ -295,7 +303,7 @@ bool saveToSD(const uint8_t* buf, size_t len,
 
 void captureAndProcess() {
   char folder[11];
-  char filename[21];
+  char filename[24];  // sized for worst case: seconds-precision filename
   getTimeStrings(folder, sizeof(folder), filename, sizeof(filename));
   Serial.printf("Capturing %s\n", filename);
 

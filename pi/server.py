@@ -201,13 +201,15 @@ def hour_view(camera, date, hour):
 
     grid = ""
     for fname in images:
-        minute = fname.split("-")[-1].replace(".jpg", "")
+        # time_part is "MM" (1-min-or-slower cameras) or "MM-SS" (sub-minute cameras)
+        time_part = fname.split("_")[1].replace(".jpg", "").split("-")[1:]
+        label_time = ":".join(time_part)
         grid += f"""
         <div>
           <a href="/img/{escape(camera)}/{escape(date)}/{escape(fname)}" target="_blank">
             <img src="/img/{escape(camera)}/{escape(date)}/{escape(fname)}" loading="lazy" alt="{escape(fname)}">
           </a>
-          <div class="img-label">{escape(hour)}:{escape(minute)} UTC</div>
+          <div class="img-label">{escape(hour)}:{escape(label_time)} UTC</div>
         </div>"""
 
     breadcrumb = (
